@@ -1,0 +1,38 @@
+{
+  "ticket_id": "TASK-20260928_150211",
+  "ticket_type": "TASK",
+  "title": "Add data validation for pollution model inputs",
+  "status": "pending",
+  "target_alias": "air-pollution",
+  "target_type": "python",
+  "target_path": "../airPollutionPrediction",
+  "skills": [
+    "security-audit"
+  ],
+  "env": {
+    "PYTHONPATH": "."
+  },
+  "created_at": "2026-09-28T15:02:11.447889",
+  "problem_statement": "Add data validation for pollution model inputs",
+  "solution_overview": "",
+  "implementation_approach": "",
+  "implementation_patterns": "",
+  "implementation_decisions": "",
+  "component_details": "",
+  "files_changed": [],
+  "unified_diff": "",
+  "gate_status": "pending",
+  "gate_output": "",
+  "test_summary": {
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "total": 0
+  },
+  "test_output": "",
+  "checklist": [],
+  "spec_url": "",
+  "task_url": "file://C:\\Users\\Nur Izfarwiza\\opencode-devbox\\.agent-inbox\\air-pollution\\task_20260928_150211",
+  "pr_url": "",
+  "commits_url": ""
+}

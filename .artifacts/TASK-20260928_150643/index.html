@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test artifact skill inclusion - TASK-20260928_150643</title>
+    <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+    <div class="artifact-container">
+        <!-- Header -->
+        <header class="artifact-header">
+            <div class="header-main">
+                <span class="ticket-badge">TASK</span>
+                <h1>Test artifact skill inclusion</h1>
+                <p class="ticket-id">TASK-20260928_150643</p>
+            </div>
+            <div class="header-meta">
+                <div class="meta-item">
+                    <span class="meta-label">Status</span>
+                    <span class="meta-value status-pending">pending</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Target</span>
+                    <span class="meta-value">whatsapp-saas</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Type</span>
+                    <span class="meta-value">node</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Created</span>
+                    <span class="meta-value">2026-09-28 15:06:43</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Completed</span>
+                    <span class="meta-value">—</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Problem Statement -->
+        <section class="artifact-section">
+            <h2>📋 Problem Statement</h2>
+            <div class="content-block">
+                Test artifact skill inclusion
+            </div>
+        </section>
+
+        <!-- Solution Overview -->
+        <section class="artifact-section">
+            <h2>🎯 Solution Overview</h2>
+            <div class="content-block">
+                
+            </div>
+        </section>
+
+        <!-- Files Changed -->
+        <section class="artifact-section">
+            <h2>📁 Files Changed (0)</h2>
+            <div class="file-table-container">
+                <table class="file-table">
+                    <thead>
+                        <tr>
+                            <th>File</th>
+                            <th>Type</th>
+                            <th>Lines +</th>
+                            <th>Lines -</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="5" style="text-align:center;color:#9ca3af;">No files changed yet</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+        </section>
+
+        <!-- Implementation Details -->
+        <section class="artifact-section">
+            <h2>🔧 Implementation Details</h2>
+            <div class="impl-tabs">
+                <div class="tab-buttons">
+                    <button class="tab-btn active" data-tab="approach">Approach</button>
+                    <button class="tab-btn" data-tab="patterns">Patterns</button>
+                    <button class="tab-btn" data-tab="decisions">Decisions</button>
+                    <button class="tab-btn" data-tab="components">Components</button>
+                </div>
+                <div class="tab-panels">
+                    <div class="tab-panel active" id="approach">
+                        
+                    </div>
+                    <div class="tab-panel" id="patterns">
+                        
+                    </div>
+                    <div class="tab-panel" id="decisions">
+                        
+                    </div>
+                    <div class="tab-panel" id="components">
+                        
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Verification -->
+        <section class="artifact-section">
+            <h2>✅ Verification</h2>
+            <div class="verification-grid">
+                <div class="verification-card">
+                    <h3>Gate Status</h3>
+                    <div class="gate-status status-pending">
+                        pending
+                    </div>
+                    <details>
+                        <summary>Gate Output</summary>
+                        <pre class="gate-output"></pre>
+                    </details>
+                </div>
+                <div class="verification-card">
+                    <h3>Test Results</h3>
+                    <div class="test-summary">
+                        
+        <span class="test-passed">✓ Passed: 0</span>
+        <span class="test-failed">✗ Failed: 0</span>
+        <span class="test-skipped">○ Skipped: 0</span>
+    
+                    </div>
+                    <details>
+                        <summary>Full Results</summary>
+                        <pre class="test-output"></pre>
+                    </details>
+                </div>
+                <div class="verification-card">
+                    <h3>Checks</h3>
+                    <ul class="checklist">
+                        <li style="color:#9ca3af;">No checklist items</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Related Links -->
+        <section class="artifact-section">
+            <h2>🔗 Related</h2>
+            <div class="related-links">
+                
+                
+                <a href="file://C:\Users\Nur Izfarwiza\opencode-devbox\.agent-inbox\whatsapp-saas\task_20260928_150643" class="related-link" target="_blank">
+                    <span class="link-icon">📋</span>
+                    <span>Task Package</span>
+                </a>
+                
+                
+                
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="artifact-footer">
+            <p>Generated by Devbox Operator Artifact System</p>
+            <p>Ticket: TASK-20260928_150643 | Project: whatsapp-saas | Generated: 2026-09-28 15:06:43</p>
+        </footer>
+    </div>
+
+    <script>
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // Copy code blocks
+        document.querySelectorAll('pre code').forEach(block => {
+            block.addEventListener('click', () => {
+                navigator.clipboard.writeText(block.textContent);
+                block.title = 'Copied!';
+                setTimeout(() => block.title = 'Click to copy', 2000);
+            });
+        });
+    </script>
+</body>
+</html>

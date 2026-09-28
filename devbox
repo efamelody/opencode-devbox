@@ -1,0 +1,740 @@
+#!/usr/bin/env python3
+import sys
+import os
+import yaml
+import subprocess
+import argparse
+import json
+import glob
+import shutil
+import re
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Any
+
+CONFIG_PATH = "devbox-config.yaml"
+ARTIFACTS_DIR = ".artifacts"
+ARTIFACT_TEMPLATE_DIR = ".devbox/skills/artifact/templates"
+
+def load_config() -> Dict[str, Any]:
+    if not os.path.exists(CONFIG_PATH):
+        print(f"[ERROR] Config file '{CONFIG_PATH}' not found.")
+        sys.exit(1)
+    with open(CONFIG_PATH, "r") as f:
+        return yaml.safe_load(f)
+
+def save_config(config: Dict[str, Any]) -> None:
+    with open(CONFIG_PATH, "w") as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+def detect_tech_stack(project_path: str, tech_stacks: Dict[str, Any]) -> Optional[str]:
+    abs_path = os.path.abspath(project_path)
+    if not os.path.exists(abs_path):
+        return None
+    
+    for stack_name, stack_config in tech_stacks.items():
+        detection_files = stack_config.get("detection", {}).get("files", [])
+        for pattern in detection_files:
+            matches = glob.glob(os.path.join(abs_path, pattern))
+            if matches:
+                return stack_name
+    return None
+
+def resolve_project_config(alias: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    projects = config.get("projects", {})
+    if alias not in projects:
+        print(f"[ERROR] Project alias '{alias}' not found in registry.")
+        sys.exit(1)
+    
+    project = projects[alias].copy()
+    tech_stacks = config.get("tech_stacks", {})
+    
+    if "type" not in project:
+        detected = detect_tech_stack(project["path"], tech_stacks)
+        if detected:
+            project["type"] = detected
+            print(f"[AUTO-DETECT] Tech stack: {detected}")
+        else:
+            print(f"[WARN] Could not auto-detect tech stack for {alias}, defaulting to 'node'")
+            project["type"] = "node"
+    
+    if "gate" not in project:
+        stack_config = tech_stacks.get(project["type"], {})
+        template = stack_config.get("gate_template", "")
+        if template:
+            project["gate"] = template.format(path=project["path"])
+    
+    stack_config = tech_stacks.get(project["type"], {})
+    default_skills = stack_config.get("default_skills", [])
+    project_skills = project.get("skills", [])
+    project["skills"] = list(dict.fromkeys(default_skills + project_skills))
+    
+    return project
+
+def run_gate(alias: str, config: Dict[str, Any]) -> None:
+    project = resolve_project_config(alias, config)
+    rel_path = project["path"]
+    gate_cmd = project.get("gate", "")
+    abs_path = os.path.abspath(rel_path)
+
+    print(f"=== [GATE] RUNNING VERIFICATION GATE FOR [{alias}] ===")
+    print(f"[PATH] Path: {abs_path}")
+    print(f"[TYPE] Type: {project.get('type', 'unknown')}")
+    print(f"[CMD] Command: {gate_cmd}\n")
+
+    if not os.path.exists(abs_path):
+        print(f"[WARN] Target directory does not exist: {abs_path}")
+        print("   Skipping live execution.")
+        return
+
+    result = subprocess.run(gate_cmd, shell=True, cwd=os.path.dirname(os.path.abspath(__file__)))
+    if result.returncode == 0:
+        print(f"\n[PASS] GATE PASSED for [{alias}]")
+    else:
+        print(f"\n[FAIL] GATE FAILED for [{alias}] (Exit code: {result.returncode})")
+    sys.exit(result.returncode)
+
+def create_task(alias: str, prompt: str, config: Dict[str, Any]) -> None:
+    project = resolve_project_config(alias, config)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    task_id = f"task_{timestamp}"
+    inbox_dir = os.path.join(".agent-inbox", alias, task_id)
+    os.makedirs(inbox_dir, exist_ok=True)
+
+    with open(os.path.join(inbox_dir, "request.md"), "w") as f:
+        f.write(f"# Task Request for [{alias}]\n\n{prompt}\n")
+
+    task_data = {
+        "version": "2.1",
+        "status": "pending",
+        "task_id": task_id,
+        "target_alias": alias,
+        "target_path": project["path"],
+        "target_type": project.get("type"),
+        "skills": project.get("skills", []),
+        "env": project.get("env", {}),
+        "created_at": datetime.now().isoformat()
+    }
+    with open(os.path.join(inbox_dir, "task.json"), "w") as f:
+        yaml.dump(task_data, f)
+
+    # Auto-create artifact for this task
+    create_artifact_from_task(alias, task_id, "TASK", prompt, project, config)
+
+    print(f"[OK] Task package [{task_id}] delivered to: {inbox_dir}")
+
+def create_artifact_from_task(alias: str, task_id: str, ticket_type: str, prompt: str, project: Dict[str, Any], config: Dict[str, Any]) -> str:
+    """Create an artifact folder from a task"""
+    # Generate ticket ID from task
+    ticket_id = task_id.replace("task_", "TASK-")
+    
+    artifact_dir = os.path.join(ARTIFACTS_DIR, ticket_id)
+    os.makedirs(artifact_dir, exist_ok=True)
+    
+    # Create subdirectories
+    for subdir in ["changes", "implementation", "verification", "assets"]:
+        os.makedirs(os.path.join(artifact_dir, subdir), exist_ok=True)
+    
+    # Copy styles.css
+    styles_src = os.path.join(ARTIFACT_TEMPLATE_DIR, "styles.css")
+    styles_dst = os.path.join(artifact_dir, "assets", "styles.css")
+    if os.path.exists(styles_src):
+        shutil.copy2(styles_src, styles_dst)
+    
+    # Create metadata.json
+    metadata = {
+        "ticket_id": ticket_id,
+        "ticket_type": ticket_type,
+        "title": prompt[:100] + ("..." if len(prompt) > 100 else ""),
+        "status": "pending",
+        "target_alias": alias,
+        "target_type": project.get("type"),
+        "target_path": project.get("path"),
+        "skills": project.get("skills", []),
+        "env": project.get("env", {}),
+        "created_at": datetime.now().isoformat(),
+        "problem_statement": prompt,
+        "solution_overview": "",
+        "implementation_approach": "",
+        "implementation_patterns": "",
+        "implementation_decisions": "",
+        "component_details": "",
+        "files_changed": [],
+        "unified_diff": "",
+        "gate_status": "pending",
+        "gate_output": "",
+        "test_summary": {"passed": 0, "failed": 0, "skipped": 0, "total": 0},
+        "test_output": "",
+        "checklist": [],
+        "spec_url": "",
+        "task_url": f"file://{os.path.abspath(os.path.join('.agent-inbox', alias, task_id))}",
+        "pr_url": "",
+        "commits_url": ""
+    }
+    
+    with open(os.path.join(artifact_dir, "metadata.json"), "w") as f:
+        json.dump(metadata, f, indent=2)
+    
+    # Create placeholder files
+    with open(os.path.join(artifact_dir, "changes", "file-diffs.md"), "w") as f:
+        f.write(f"# File Diffs for {ticket_id}\n\n_Pending implementation_\n")
+    
+    with open(os.path.join(artifact_dir, "changes", "file-list.json"), "w") as f:
+        json.dump([], f, indent=2)
+    
+    with open(os.path.join(artifact_dir, "implementation", "approach.md"), "w") as f:
+        f.write(f"# Implementation Approach\n\n_TBD_\n")
+    
+    with open(os.path.join(artifact_dir, "implementation", "patterns.md"), "w") as f:
+        f.write(f"# Patterns Used\n\n_TBD_\n")
+    
+    with open(os.path.join(artifact_dir, "implementation", "decisions.md"), "w") as f:
+        f.write(f"# Key Decisions\n\n_TBD_\n")
+    
+    with open(os.path.join(artifact_dir, "verification", "gate-output.txt"), "w") as f:
+        f.write("_Gate not yet run_\n")
+    
+    with open(os.path.join(artifact_dir, "verification", "test-results.json"), "w") as f:
+        json.dump({"passed": 0, "failed": 0, "skipped": 0, "total": 0}, f, indent=2)
+    
+    # Generate initial HTML
+    generate_artifact_html(ticket_id)
+    
+    print(f"[OK] Artifact [{ticket_id}] created at: {artifact_dir}")
+    return artifact_dir
+
+def generate_artifact_html(ticket_id: str) -> None:
+    """Generate HTML artifact from metadata and template"""
+    artifact_dir = os.path.join(ARTIFACTS_DIR, ticket_id)
+    metadata_path = os.path.join(artifact_dir, "metadata.json")
+    template_path = os.path.join(ARTIFACT_TEMPLATE_DIR, "artifact.html")
+    
+    if not os.path.exists(metadata_path):
+        print(f"[ERROR] Metadata not found for {ticket_id}")
+        return
+    
+    if not os.path.exists(template_path):
+        print(f"[ERROR] Template not found at {template_path}")
+        return
+    
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
+    
+    with open(template_path, "r", encoding="utf-8") as f:
+        template = f.read()
+    
+    # Prepare template variables
+    file_rows = ""
+    for fc in metadata.get("files_changed", []):
+        file_type_class = f"type-{fc.get('type', 'modified')}"
+        file_rows += f"""
+        <tr>
+            <td><code>{fc.get('file', '')}</code></td>
+            <td><span class="file-type {file_type_class}">{fc.get('type', 'modified')}</span></td>
+            <td class="lines-added">+{fc.get('lines_added', 0)}</td>
+            <td class="lines-removed">-{fc.get('lines_removed', 0)}</td>
+            <td>{fc.get('description', '')}</td>
+        </tr>"""
+    
+    if not file_rows:
+        file_rows = '<tr><td colspan="5" style="text-align:center;color:#9ca3af;">No files changed yet</td></tr>'
+    
+    checklist_items = ""
+    for item in metadata.get("checklist", []):
+        status_class = "failed" if item.get("status") == "failed" else ""
+        checklist_items += f'<li class="{status_class}">{item.get("item", "")}</li>'
+    
+    if not checklist_items:
+        checklist_items = '<li style="color:#9ca3af;">No checklist items</li>'
+    
+    test_summary = metadata.get("test_summary", {})
+    test_summary_html = f"""
+        <span class="test-passed">✓ Passed: {test_summary.get('passed', 0)}</span>
+        <span class="test-failed">✗ Failed: {test_summary.get('failed', 0)}</span>
+        <span class="test-skipped">○ Skipped: {test_summary.get('skipped', 0)}</span>
+    """
+    
+    # Replace template variables
+    replacements = {
+        "{{TICKET_ID}}": metadata.get("ticket_id", ""),
+        "{{TICKET_TYPE}}": metadata.get("ticket_type", "TASK"),
+        "{{TITLE}}": metadata.get("title", ""),
+        "{{STATUS}}": metadata.get("status", "pending"),
+        "{{TARGET_ALIAS}}": metadata.get("target_alias", ""),
+        "{{TARGET_TYPE}}": metadata.get("target_type", ""),
+        "{{CREATED_AT}}": format_datetime(metadata.get("created_at", "")),
+        "{{COMPLETED_AT}}": format_datetime(metadata.get("completed_at", "")) or "—",
+        "{{PROBLEM_STATEMENT}}": escape_html(metadata.get("problem_statement", "")),
+        "{{SOLUTION_OVERVIEW}}": escape_html(metadata.get("solution_overview", "")),
+        "{{FILES_CHANGED_COUNT}}": str(len(metadata.get("files_changed", []))),
+        "{{FILE_ROWS}}": file_rows,
+        "{{HAS_CHANGES_DETAIL}}": "true" if metadata.get("unified_diff") else "false",
+        "{{UNIFIED_DIFF}}": escape_html(metadata.get("unified_diff", "")),
+        "{{IMPLEMENTATION_APPROACH}}": escape_html(metadata.get("implementation_approach", "")),
+        "{{IMPLEMENTATION_PATTERNS}}": escape_html(metadata.get("implementation_patterns", "")),
+        "{{IMPLEMENTATION_DECISIONS}}": escape_html(metadata.get("implementation_decisions", "")),
+        "{{COMPONENT_DETAILS}}": escape_html(metadata.get("component_details", "")),
+        "{{GATE_STATUS}}": metadata.get("gate_status", "pending"),
+        "{{GATE_OUTPUT}}": escape_html(metadata.get("gate_output", "")),
+        "{{TEST_SUMMARY}}": test_summary_html,
+        "{{TEST_OUTPUT}}": escape_html(metadata.get("test_output", "")),
+        "{{CHECKLIST_ITEMS}}": checklist_items,
+        "{{SPEC_URL}}": metadata.get("spec_url", ""),
+        "{{TASK_URL}}": metadata.get("task_url", ""),
+        "{{PR_URL}}": metadata.get("pr_url", ""),
+        "{{COMMITS_URL}}": metadata.get("commits_url", ""),
+        "{{GENERATED_AT}}": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    html = template
+    for key, value in replacements.items():
+        html = html.replace(key, value)
+    
+    # Handle conditional blocks (simple approach)
+    html = re.sub(r'{% if HAS_CHANGES_DETAIL %}(.*?){% endif %}', 
+                  r'\1' if metadata.get("unified_diff") else '', 
+                  html, flags=re.DOTALL)
+    html = re.sub(r'{% if SPEC_URL %}(.*?){% endif %}', 
+                  r'\1' if metadata.get("spec_url") else '', 
+                  html, flags=re.DOTALL)
+    html = re.sub(r'{% if TASK_URL %}(.*?){% endif %}', 
+                  r'\1' if metadata.get("task_url") else '', 
+                  html, flags=re.DOTALL)
+    html = re.sub(r'{% if PR_URL %}(.*?){% endif %}', 
+                  r'\1' if metadata.get("pr_url") else '', 
+                  html, flags=re.DOTALL)
+    html = re.sub(r'{% if COMMITS_URL %}(.*?){% endif %}', 
+                  r'\1' if metadata.get("commits_url") else '', 
+                  html, flags=re.DOTALL)
+    
+    output_path = os.path.join(artifact_dir, "index.html")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    
+    print(f"[OK] Generated {output_path}")
+
+def format_datetime(iso_str: str) -> str:
+    if not iso_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except:
+        return iso_str
+
+def escape_html(text: str) -> str:
+    if not text:
+        return ""
+    return (text
+        .replace("&", "&")
+        .replace("<", "<")
+        .replace(">", ">")
+        .replace("\"", "\"")
+        .replace("\'", "\'")
+        .replace("\n", "<br>")
+    )
+
+def create_artifact(alias: str, ticket_id: str, ticket_type: str, title: str, prompt: str, config: Dict[str, Any]) -> None:
+    """Manual artifact creation"""
+    project = resolve_project_config(alias, config)
+    artifact_dir = create_artifact_from_task(alias, ticket_id, ticket_type, prompt, project, config)
+    
+    # Update metadata with provided title
+    metadata_path = os.path.join(artifact_dir, "metadata.json")
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
+    metadata["title"] = title
+    metadata["ticket_id"] = ticket_id
+    metadata["ticket_type"] = ticket_type
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+    
+    generate_artifact_html(ticket_id)
+
+def update_artifact(ticket_id: str, updates: Dict[str, Any]) -> None:
+    """Update artifact metadata and regenerate HTML"""
+    artifact_dir = os.path.join(ARTIFACTS_DIR, ticket_id)
+    metadata_path = os.path.join(artifact_dir, "metadata.json")
+    
+    if not os.path.exists(metadata_path):
+        print(f"[ERROR] Artifact {ticket_id} not found")
+        return
+    
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
+    
+    metadata.update(updates)
+    
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+    
+    generate_artifact_html(ticket_id)
+    print(f"[OK] Updated artifact {ticket_id}")
+
+def finalize_artifact(ticket_id: str, gate_result: Dict[str, Any] = None, test_result: Dict[str, Any] = None) -> None:
+    """Mark artifact as completed with gate/test results"""
+    updates = {
+        "status": "completed",
+        "completed_at": datetime.now().isoformat(),
+    }
+    
+    if gate_result:
+        updates["gate_status"] = "passed" if gate_result.get("passed", False) else "failed"
+        updates["gate_output"] = gate_result.get("output", "")
+    
+    if test_result:
+        updates["test_summary"] = test_result.get("summary", {"passed": 0, "failed": 0, "skipped": 0, "total": 0})
+        updates["test_output"] = test_result.get("output", "")
+    
+    update_artifact(ticket_id, updates)
+
+def list_artifacts(config: Dict[str, Any]) -> None:
+    """List all artifacts"""
+    artifacts_path = Path(ARTIFACTS_DIR)
+    if not artifacts_path.exists():
+        print("No artifacts directory found")
+        return
+    
+    print("Generated Artifacts:")
+    print("-" * 60)
+    
+    for artifact_dir in sorted(artifacts_path.iterdir()):
+        if artifact_dir.is_dir():
+            metadata_path = artifact_dir / "metadata.json"
+            if metadata_path.exists():
+                with open(metadata_path, "r") as f:
+                    metadata = json.load(f)
+                
+                status = metadata.get("status", "unknown")
+                ticket_id = metadata.get("ticket_id", artifact_dir.name)
+                title = metadata.get("title", "Untitled")
+                target = metadata.get("target_alias", "unknown")
+                created = format_datetime(metadata.get("created_at", ""))
+                
+                status_icon = {
+                    "pending": "[PENDING]",
+                    "in_progress": "[IN PROGRESS]",
+                    "completed": "[DONE]",
+                    "failed": "[FAILED]",
+                    "cancelled": "[CANCELLED]"
+                }.get(status, "[UNKNOWN]")
+                
+                print(f"{status_icon} {ticket_id}")
+                print(f"  Title: {title}")
+                print(f"  Target: {target}")
+                print(f"  Created: {created}")
+                print(f"  Path: {artifact_dir}/index.html")
+                print()
+
+def open_artifact(ticket_id: str) -> None:
+    """Open artifact HTML in browser"""
+    artifact_path = os.path.abspath(os.path.join(ARTIFACTS_DIR, ticket_id, "index.html"))
+    if not os.path.exists(artifact_path):
+        print(f"[ERROR] Artifact {ticket_id} not found")
+        return
+    
+    import webbrowser
+    webbrowser.open(f"file://{artifact_path}")
+    print(f"[OK] Opened {artifact_path}")
+
+def list_projects(config: Dict[str, Any]) -> None:
+    print("Registered Devbox Projects:")
+    print("-" * 60)
+    tech_stacks = config.get("tech_stacks", {})
+    for alias, details in config.get("projects", {}).items():
+        project_type = details.get("type")
+        if not project_type:
+            project_type = detect_tech_stack(details["path"], tech_stacks) or "unknown (auto-detect)"
+        print(f"• {alias:<18} [{project_type}] -> {details.get('path')}")
+        print(f"  Description: {details.get('description', 'N/A')}")
+        print(f"  Skills: {', '.join(details.get('skills', [])) or 'N/A'}")
+        gate = details.get("gate")
+        if not gate:
+            stack = tech_stacks.get(project_type, {})
+            gate = stack.get("gate_template", "N/A").format(path=details["path"])
+        print(f"  Gate: {gate}\n")
+
+def detect_stack(path: str, config: Dict[str, Any]) -> None:
+    tech_stacks = config.get("tech_stacks", {})
+    abs_path = os.path.abspath(path)
+    
+    print(f"[DETECT] Detecting tech stack for: {abs_path}")
+    if not os.path.exists(abs_path):
+        print(f"[ERROR] Path does not exist: {abs_path}")
+        sys.exit(1)
+    
+    detected = detect_tech_stack(path, tech_stacks)
+    if detected:
+        stack_info = tech_stacks[detected]
+        print(f"[OK] Detected: {detected}")
+        print(f"   Description: {stack_info.get('description')}")
+        print(f"   Default skills: {', '.join(stack_info.get('default_skills', []))}")
+        print(f"   Gate template: {stack_info.get('gate_template')}")
+    else:
+        print("[ERROR] No known tech stack detected")
+        print("   Supported stacks:")
+        for name, info in tech_stacks.items():
+            files = info.get("detection", {}).get("files", [])
+            print(f"   • {name}: looks for {', '.join(files)}")
+
+def validate_config(config: Dict[str, Any]) -> None:
+    print("[VALIDATE] Validating devbox-config.yaml...\n")
+    errors = []
+    warnings = []
+    
+    tech_stacks = config.get("tech_stacks", {})
+    projects = config.get("projects", {})
+    
+    if not tech_stacks:
+        errors.append("No tech_stacks defined")
+    
+    if not projects:
+        warnings.append("No projects registered")
+    
+    for alias, project in projects.items():
+        path = project.get("path", "")
+        abs_path = os.path.abspath(path)
+        
+        if not os.path.exists(abs_path):
+            warnings.append(f"Project '{alias}': path does not exist: {abs_path}")
+        
+        project_type = project.get("type")
+        if project_type and project_type not in tech_stacks:
+            errors.append(f"Project '{alias}': unknown type '{project_type}' (not in tech_stacks)")
+        
+        gate = project.get("gate")
+        if not gate and project_type:
+            template = tech_stacks.get(project_type, {}).get("gate_template")
+            if not template:
+                warnings.append(f"Project '{alias}': no gate command and no template for type '{project_type}'")
+    
+    for stack_name, stack_config in tech_stacks.items():
+        if "detection" not in stack_config:
+            warnings.append(f"Tech stack '{stack_name}': missing detection config")
+        if "gate_template" not in stack_config:
+            warnings.append(f"Tech stack '{stack_name}': missing gate_template")
+    
+    if errors:
+        print("[ERROR] Errors:")
+        for e in errors:
+            print(f"  • {e}")
+    else:
+        print("[OK] No errors")
+    
+    if warnings:
+        print("\n[WARN] Warnings:")
+        for w in warnings:
+            print(f"  • {w}")
+    else:
+        print("\n[OK] No warnings")
+    
+    if errors:
+        sys.exit(1)
+
+def list_tech_stacks(config: Dict[str, Any]) -> None:
+    tech_stacks = config.get("tech_stacks", {})
+    print("Registered Tech Stacks:")
+    print("-" * 60)
+    for name, info in tech_stacks.items():
+        print(f"• {name}")
+        print(f"  Description: {info.get('description', 'N/A')}")
+        print(f"  Detection files: {', '.join(info.get('detection', {}).get('files', []))}")
+        print(f"  Gate template: {info.get('gate_template', 'N/A')}")
+        print(f"  Default skills: {', '.join(info.get('default_skills', [])) or 'N/A'}")
+        print(f"  Env vars: {', '.join(info.get('env_vars', [])) or 'N/A'}\n")
+
+def list_skills(config: Dict[str, Any]) -> None:
+    skills_dir = Path(".devbox/skills")
+    if not skills_dir.exists():
+        print("No skills directory found")
+        return
+    
+    print("Available Skills:")
+    print("-" * 60)
+    for skill_dir in skills_dir.iterdir():
+        if skill_dir.is_dir():
+            skill_file = skill_dir / "SKILL.md"
+            if skill_file.exists():
+                content = skill_file.read_text()
+                lines = content.split("\n")
+                desc = lines[0].replace("#", "").strip() if lines else "No description"
+                print(f"• {skill_dir.name}")
+                print(f"  {desc}\n")
+
+def init_project(template: str, alias: str, path: Optional[str], config: Dict[str, Any]) -> None:
+    templates_dir = Path(".devbox/templates")
+    template_path = templates_dir / template
+    
+    if not template_path.exists():
+        print(f"[ERROR] Template '{template}' not found in {templates_dir}")
+        print("Available templates:")
+        for t in templates_dir.iterdir():
+            if t.is_dir():
+                print(f"  • {t.name}")
+        sys.exit(1)
+    
+    if not path:
+        path = f"../{alias}"
+    
+    abs_path = os.path.abspath(path)
+    if os.path.exists(abs_path):
+        print(f"[ERROR] Target path already exists: {abs_path}")
+        sys.exit(1)
+    
+    print(f"[INIT] Initializing project '{alias}' from template '{template}' at {abs_path}")
+    
+    shutil.copytree(template_path, abs_path)
+    
+    if "projects" not in config:
+        config["projects"] = {}
+    
+    detected_type = template.split("/")[0] if "/" in template else template
+    
+    config["projects"][alias] = {
+        "path": path,
+        "type": detected_type,
+        "description": f"Project initialized from {template} template",
+        "skills": config.get("tech_stacks", {}).get(detected_type, {}).get("default_skills", [])
+    }
+    
+    save_config(config)
+    print(f"[OK] Project '{alias}' created and registered")
+    print(f"   Run: ./devbox gate {alias}  (after installing dependencies)")
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Devbox Operator Control Plane")
+    subparsers = parser.add_subparsers(dest="subcommand", help="Available commands")
+
+    # list
+    subparsers.add_parser("list", help="List all registered projects")
+
+    # gate
+    gate_parser = subparsers.add_parser("gate", help="Run verification gate for a project")
+    gate_parser.add_argument("alias", help="Project alias")
+
+    # task
+    task_parser = subparsers.add_parser("task", help="Create a task package in .agent-inbox")
+    task_parser.add_argument("alias", help="Target project alias")
+    task_parser.add_argument("prompt", help="Task prompt description")
+
+    # artifact
+    artifact_parser = subparsers.add_parser("artifact", help="Manage documentation artifacts")
+    artifact_sub = artifact_parser.add_subparsers(dest="artifact_action")
+    
+    # artifact create
+    create_parser = artifact_sub.add_parser("create", help="Create a new artifact")
+    create_parser.add_argument("alias", help="Project alias")
+    create_parser.add_argument("ticket_id", help="Ticket ID (e.g., CR-101, TASK-20240115)")
+    create_parser.add_argument("ticket_type", help="Ticket type", choices=["CR", "TASK", "BUG", "FEATURE", "REFACTOR"])
+    create_parser.add_argument("title", help="Artifact title")
+    create_parser.add_argument("prompt", help="Problem statement / prompt")
+    
+    # artifact update
+    update_parser = artifact_sub.add_parser("update", help="Update artifact metadata")
+    update_parser.add_argument("ticket_id", help="Ticket ID")
+    update_parser.add_argument("--status", help="Status", choices=["pending", "in_progress", "completed", "failed", "cancelled"])
+    update_parser.add_argument("--title", help="Title")
+    update_parser.add_argument("--problem", help="Problem statement")
+    update_parser.add_argument("--solution", help="Solution overview")
+    update_parser.add_argument("--approach", help="Implementation approach")
+    update_parser.add_argument("--patterns", help="Patterns used")
+    update_parser.add_argument("--decisions", help="Key decisions")
+    update_parser.add_argument("--components", help="Component details")
+    
+    # artifact finalize
+    finalize_parser = artifact_sub.add_parser("finalize", help="Finalize artifact with gate/test results")
+    finalize_parser.add_argument("ticket_id", help="Ticket ID")
+    finalize_parser.add_argument("--gate-passed", action="store_true", help="Gate passed")
+    finalize_parser.add_argument("--gate-output", help="Gate output text")
+    finalize_parser.add_argument("--tests-passed", type=int, default=0, help="Tests passed")
+    finalize_parser.add_argument("--tests-failed", type=int, default=0, help="Tests failed")
+    finalize_parser.add_argument("--tests-skipped", type=int, default=0, help="Tests skipped")
+    finalize_parser.add_argument("--test-output", help="Test output text")
+    
+    # artifact list
+    artifact_sub.add_parser("list", help="List all artifacts")
+    
+    # artifact open
+    open_parser = artifact_sub.add_parser("open", help="Open artifact in browser")
+    open_parser.add_argument("ticket_id", help="Ticket ID")
+
+    # detect
+    detect_parser = subparsers.add_parser("detect", help="Detect tech stack for a path")
+    detect_parser.add_argument("path", help="Path to project directory")
+
+    # validate
+    subparsers.add_parser("validate", help="Validate devbox-config.yaml")
+
+    # tech-stacks
+    subparsers.add_parser("tech-stacks", help="List registered tech stacks")
+
+    # skills
+    subparsers.add_parser("skills", help="List available skills")
+
+    # init
+    init_parser = subparsers.add_parser("init", help="Initialize a new project from template")
+    init_parser.add_argument("template", help="Template name (e.g., node/nextjs, python/fastapi)")
+    init_parser.add_argument("alias", help="Project alias to register")
+    init_parser.add_argument("path", nargs="?", help="Target path (default: ../<alias>)")
+
+    args = parser.parse_args()
+    config = load_config()
+
+    if args.subcommand == "list":
+        list_projects(config)
+    elif args.subcommand == "gate":
+        run_gate(args.alias, config)
+    elif args.subcommand == "task":
+        create_task(args.alias, args.prompt, config)
+    elif args.subcommand == "artifact":
+        if args.artifact_action == "create":
+            create_artifact(args.alias, args.ticket_id, args.ticket_type, args.title, args.prompt, config)
+        elif args.artifact_action == "update":
+            updates = {}
+            if args.status: updates["status"] = args.status
+            if args.title: updates["title"] = args.title
+            if args.problem: updates["problem_statement"] = args.problem
+            if args.solution: updates["solution_overview"] = args.solution
+            if args.approach: updates["implementation_approach"] = args.approach
+            if args.patterns: updates["implementation_patterns"] = args.patterns
+            if args.decisions: updates["implementation_decisions"] = args.decisions
+            if args.components: updates["component_details"] = args.components
+            update_artifact(args.ticket_id, updates)
+        elif args.artifact_action == "finalize":
+            gate_result = None
+            if args.gate_passed is not None or args.gate_output:
+                gate_result = {"passed": args.gate_passed, "output": args.gate_output or ""}
+            test_result = None
+            if any([args.tests_passed, args.tests_failed, args.tests_skipped, args.test_output]):
+                test_result = {
+                    "summary": {
+                        "passed": args.tests_passed,
+                        "failed": args.tests_failed,
+                        "skipped": args.tests_skipped,
+                        "total": args.tests_passed + args.tests_failed + args.tests_skipped
+                    },
+                    "output": args.test_output or ""
+                }
+            finalize_artifact(args.ticket_id, gate_result, test_result)
+        elif args.artifact_action == "list":
+            list_artifacts(config)
+        elif args.artifact_action == "open":
+            open_artifact(args.ticket_id)
+        else:
+            artifact_parser.print_help()
+    elif args.subcommand == "detect":
+        detect_stack(args.path, config)
+    elif args.subcommand == "validate":
+        validate_config(config)
+    elif args.subcommand == "tech-stacks":
+        list_tech_stacks(config)
+    elif args.subcommand == "skills":
+        list_skills(config)
+    elif args.subcommand == "init":
+        init_project(args.template, args.alias, args.path, config)
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()

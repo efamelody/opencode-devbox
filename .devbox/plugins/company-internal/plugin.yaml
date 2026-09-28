@@ -1,0 +1,14 @@
+name: "company-internal"
+version: "1.0.0"
+description: "Internal company extensions for Devbox Operator"
+author: "Platform Team"
+hooks:
+  pre_gate: "gate-hooks/pre-gate.sh"
+  post_gate: "gate-hooks/post-gate.sh"
+  pre_task: "gate-hooks/pre-task.sh"
+  post_task: "gate-hooks/post-task.sh"
+skills:
+  - "skill-extensions/company-security-audit.md"
+templates:
+  - "templates/node/internal-api"
+  - "templates/python/internal-service"

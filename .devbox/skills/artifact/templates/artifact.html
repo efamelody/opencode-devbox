@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{TITLE}} - {{TICKET_ID}}</title>
+    <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+    <div class="artifact-container">
+        <!-- Header -->
+        <header class="artifact-header">
+            <div class="header-main">
+                <span class="ticket-badge">{{TICKET_TYPE}}</span>
+                <h1>{{TITLE}}</h1>
+                <p class="ticket-id">{{TICKET_ID}}</p>
+            </div>
+            <div class="header-meta">
+                <div class="meta-item">
+                    <span class="meta-label">Status</span>
+                    <span class="meta-value status-{{STATUS}}">{{STATUS}}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Target</span>
+                    <span class="meta-value">{{TARGET_ALIAS}}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Type</span>
+                    <span class="meta-value">{{TARGET_TYPE}}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Created</span>
+                    <span class="meta-value">{{CREATED_AT}}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Completed</span>
+                    <span class="meta-value">{{COMPLETED_AT}}</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Problem Statement -->
+        <section class="artifact-section">
+            <h2>📋 Problem Statement</h2>
+            <div class="content-block">
+                {{PROBLEM_STATEMENT}}
+            </div>
+        </section>
+
+        <!-- Solution Overview -->
+        <section class="artifact-section">
+            <h2>🎯 Solution Overview</h2>
+            <div class="content-block">
+                {{SOLUTION_OVERVIEW}}
+            </div>
+        </section>
+
+        <!-- Files Changed -->
+        <section class="artifact-section">
+            <h2>📁 Files Changed ({{FILES_CHANGED_COUNT}})</h2>
+            <div class="file-table-container">
+                <table class="file-table">
+                    <thead>
+                        <tr>
+                            <th>File</th>
+                            <th>Type</th>
+                            <th>Lines +</th>
+                            <th>Lines -</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{FILE_ROWS}}
+                    </tbody>
+                </table>
+            </div>
+            {% if HAS_CHANGES_DETAIL %}
+            <details class="diff-details">
+                <summary>View Unified Diff</summary>
+                <pre class="diff-content">{{UNIFIED_DIFF}}</pre>
+            </details>
+            {% endif %}
+        </section>
+
+        <!-- Implementation Details -->
+        <section class="artifact-section">
+            <h2>🔧 Implementation Details</h2>
+            <div class="impl-tabs">
+                <div class="tab-buttons">
+                    <button class="tab-btn active" data-tab="approach">Approach</button>
+                    <button class="tab-btn" data-tab="patterns">Patterns</button>
+                    <button class="tab-btn" data-tab="decisions">Decisions</button>
+                    <button class="tab-btn" data-tab="components">Components</button>
+                </div>
+                <div class="tab-panels">
+                    <div class="tab-panel active" id="approach">
+                        {{IMPLEMENTATION_APPROACH}}
+                    </div>
+                    <div class="tab-panel" id="patterns">
+                        {{IMPLEMENTATION_PATTERNS}}
+                    </div>
+                    <div class="tab-panel" id="decisions">
+                        {{IMPLEMENTATION_DECISIONS}}
+                    </div>
+                    <div class="tab-panel" id="components">
+                        {{COMPONENT_DETAILS}}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Verification -->
+        <section class="artifact-section">
+            <h2>✅ Verification</h2>
+            <div class="verification-grid">
+                <div class="verification-card">
+                    <h3>Gate Status</h3>
+                    <div class="gate-status status-{{GATE_STATUS}}">
+                        {{GATE_STATUS}}
+                    </div>
+                    <details>
+                        <summary>Gate Output</summary>
+                        <pre class="gate-output">{{GATE_OUTPUT}}</pre>
+                    </details>
+                </div>
+                <div class="verification-card">
+                    <h3>Test Results</h3>
+                    <div class="test-summary">
+                        {{TEST_SUMMARY}}
+                    </div>
+                    <details>
+                        <summary>Full Results</summary>
+                        <pre class="test-output">{{TEST_OUTPUT}}</pre>
+                    </details>
+                </div>
+                <div class="verification-card">
+                    <h3>Checks</h3>
+                    <ul class="checklist">
+                        {{CHECKLIST_ITEMS}}
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Related Links -->
+        <section class="artifact-section">
+            <h2>🔗 Related</h2>
+            <div class="related-links">
+                {% if SPEC_URL %}
+                <a href="{{SPEC_URL}}" class="related-link" target="_blank">
+                    <span class="link-icon">📄</span>
+                    <span>Specification</span>
+                </a>
+                {% endif %}
+                {% if TASK_URL %}
+                <a href="{{TASK_URL}}" class="related-link" target="_blank">
+                    <span class="link-icon">📋</span>
+                    <span>Task Package</span>
+                </a>
+                {% endif %}
+                {% if PR_URL %}
+                <a href="{{PR_URL}}" class="related-link" target="_blank">
+                    <span class="link-icon">🔀</span>
+                    <span>Pull Request</span>
+                </a>
+                {% endif %}
+                {% if COMMITS_URL %}
+                <a href="{{COMMITS_URL}}" class="related-link" target="_blank">
+                    <span class="link-icon">📝</span>
+                    <span>Commits</span>
+                </a>
+                {% endif %}
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="artifact-footer">
+            <p>Generated by Devbox Operator Artifact System</p>
+            <p>Ticket: {{TICKET_ID}} | Project: {{TARGET_ALIAS}} | Generated: {{GENERATED_AT}}</p>
+        </footer>
+    </div>
+
+    <script>
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // Copy code blocks
+        document.querySelectorAll('pre code').forEach(block => {
+            block.addEventListener('click', () => {
+                navigator.clipboard.writeText(block.textContent);
+                block.title = 'Copied!';
+                setTimeout(() => block.title = 'Click to copy', 2000);
+            });
+        });
+    </script>
+</body>
+</html>

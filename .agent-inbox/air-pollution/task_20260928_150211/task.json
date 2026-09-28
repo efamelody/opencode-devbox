@@ -1,0 +1,11 @@
+created_at: '2026-09-28T15:02:11.419782'
+env:
+  PYTHONPATH: .
+skills:
+- security-audit
+status: pending
+target_alias: air-pollution
+target_path: ../airPollutionPrediction
+target_type: python
+task_id: task_20260928_150211
+version: '2.1'

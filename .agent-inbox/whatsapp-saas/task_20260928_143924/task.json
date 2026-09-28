@@ -1,0 +1,13 @@
+created_at: '2026-09-28T14:39:24.692258'
+env:
+  DATABASE_URL: postgresql://localhost:5432/whatsapp_saas
+  REDIS_URL: redis://localhost:6379
+skills:
+- security-audit
+- db-migration
+status: pending
+target_alias: whatsapp-saas
+target_path: ../whatsapp-saas
+target_type: node
+task_id: task_20260928_143924
+version: '2.1'

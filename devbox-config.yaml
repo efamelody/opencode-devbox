@@ -1,0 +1,121 @@
+version: '2.1'
+operator_name: devbox-central-gpt
+tech_stacks:
+  node:
+    detection:
+      files:
+      - package.json
+      - pnpm-lock.yaml
+      - yarn.lock
+      - package-lock.json
+    gate_template: .devbox/gates/node-gate.sh {path}
+    default_skills: &id001
+    - security-audit
+    - db-migration
+    - artifact
+    env_vars:
+    - NODE_ENV
+    - NPM_TOKEN
+    description: Node.js / TypeScript projects (Next.js, Express, CLI tools)
+  python:
+    detection:
+      files:
+      - pyproject.toml
+      - requirements.txt
+      - setup.py
+      - setup.cfg
+      - Pipfile
+    gate_template: .devbox/gates/python-gate.sh {path}
+    default_skills:
+    - security-audit
+    - artifact
+    env_vars:
+    - PYTHONPATH
+    - PYTHON_ENV
+    description: Python projects (FastAPI, Django, CLI, ML)
+  java-gradle:
+    detection:
+      files:
+      - build.gradle
+      - build.gradle.kts
+      - settings.gradle
+      - settings.gradle.kts
+      - gradle.properties
+    gate_template: .devbox/gates/java-gate.sh {path}
+    default_skills:
+    - spring-boot-refactor
+    - security-audit
+    - artifact
+    env_vars:
+    - JAVA_HOME
+    - GRADLE_OPTS
+    description: Java Gradle projects (Spring Boot, Microservices)
+  go:
+    detection:
+      files:
+      - go.mod
+      - go.sum
+    gate_template: .devbox/gates/go-gate.sh {path}
+    default_skills:
+    - security-audit
+    - artifact
+    env_vars:
+    - GO_ENV
+    - GOPROXY
+    description: Go projects (Microservices, CLI tools)
+  rust:
+    detection:
+      files:
+      - Cargo.toml
+      - Cargo.lock
+    gate_template: .devbox/gates/rust-gate.sh {path}
+    default_skills:
+    - security-audit
+    - artifact
+    env_vars:
+    - RUST_ENV
+    - CARGO_HOME
+    description: Rust projects (CLI, WebAssembly, Systems)
+  dotnet:
+    detection:
+      files:
+      - '*.csproj'
+      - '*.sln'
+      - global.json
+      - nuget.config
+    gate_template: .devbox/gates/dotnet-gate.sh {path}
+    default_skills:
+    - security-audit
+    - artifact
+    env_vars:
+    - DOTNET_ENV
+    - NUGET_PACKAGES
+    description: .NET projects (ASP.NET Core, Console, Libraries)
+projects:
+  whatsapp-saas:
+    path: ../whatsapp-saas
+    description: Multi-tenant WhatsApp booking SaaS
+    skills:
+    - security-audit
+    env:
+      DATABASE_URL: postgresql://localhost:5432/whatsapp_saas
+      REDIS_URL: redis://localhost:6379
+  lecturer-biography:
+    path: ../lecturer-biography
+    description: Academic portfolio website
+    skills:
+    - security-audit
+  mrtquest:
+    path: ../mrtquest
+    description: Transit gamification web app
+    skills:
+    - security-audit
+  air-pollution:
+    path: ../airPollutionPrediction
+    type: python
+    description: Advection-diffusion pollution model
+    skills:
+    - security-audit
+    env:
+      PYTHONPATH: .
+  
